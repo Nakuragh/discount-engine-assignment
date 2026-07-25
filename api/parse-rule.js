@@ -43,9 +43,23 @@ Rules:
           contents: [{ role: 'user', parts: [{ text }] }],
           generationConfig: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 1024,
+            maxOutputTokens: 2048,
             thinkingConfig: {
               thinkingBudget: 0,
+            },
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                scope: { type: 'STRING', enum: ['brand', 'platform', 'cart'] },
+                appliesTo: { type: 'STRING', nullable: true },
+                type: { type: 'STRING', enum: ['percentage', 'flat'] },
+                value: { type: 'NUMBER', nullable: true },
+                stackable: { type: 'BOOLEAN' },
+                minCartValue: { type: 'NUMBER', nullable: true },
+                resolvable: { type: 'BOOLEAN' },
+                clarificationNeeded: { type: 'STRING', nullable: true },
+              },
+              required: ['scope', 'type', 'stackable', 'resolvable'],
             },
           },
         }),

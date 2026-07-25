@@ -172,3 +172,38 @@ export function processCart(cartItems, rules) {
 export function cartTotal(results) {
   return results.reduce((sum, r) => sum + r.finalPrice, 0)
 }
+export function applyCartLevelRule(results, rules) {
+  const itemTotal = cartTotal(results)
+  const cartRules = rules.filter((r) => r.scope === 'cart')
+  const eligible = cartRules.filter((r) => itemTotal >= r.minCartValue)
+
+  if (eligible.length === 0) {
+    return { cartOffer: null, finalCartTotal: itemTotal }
+  }
+
+  // If multiple cart rules could apply, same "largest saving wins" logic as item level
+  const sorted = [...eligible].sort(
+    (a, b) => calculateDiscountAmount(itemTotal, b) - calculateDiscountAmount(itemTotal, a)
+  )
+  const winner = sorted[0]
+  const amountSaved = calculateDiscountAmount(itemTotal, winner)
+
+  return {
+    cartOffer: {
+      ruleId: winner.ruleId,
+      label: winner.type === 'percentage'
+        ? `Cart offer: ${winner.value}% off`
+        : `Cart offer: Rs.${winner.value} off`,
+      amountSaved,
+    },
+    finalCartTotal: itemTotal - amountSaved,
+  }
+}
+
+
+export function calculateCart(cartItems, rules) {
+  const itemRules = rules.filter((r) => r.scope !== 'cart')
+  const results = processCart(cartItems, itemRules)
+  const { cartOffer, finalCartTotal } = applyCartLevelRule(results, rules)
+  return { results, cartOffer, finalCartTotal }
+}

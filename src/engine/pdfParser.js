@@ -43,7 +43,20 @@ function splitRowIntoColumns(fragments) {
     .sort((a, b) => a.x - b.x)
 
   if (sorted.length === 0) return []
-  if (sorted.length === 1) return [sorted[0].text.trim()]
+  function splitRowIntoColumns(fragments) {
+  const sorted = fragments
+    .filter((f) => f.text.trim().length > 0)
+    .sort((a, b) => a.x - b.x)
+
+  if (sorted.length === 0) return []
+  if (sorted.length === 1) {
+    // Single fragment — the whole row came through as one string.
+    // Fall back to splitting on 2+ literal space characters inside it.
+    const spaceSplit = sorted[0].text.trim().split(/\s{2,}/).filter(Boolean)
+    return spaceSplit.length >= EXPECTED_COLUMNS ? spaceSplit : [sorted[0].text.trim()]
+  }
+
+  // ... rest of the function stays exactly the same (gap computation, etc.)
 
   // Compute the gap before each fragment (except the first)
   const gaps = []

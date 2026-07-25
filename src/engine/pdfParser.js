@@ -13,7 +13,7 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
 const COLUMN_GAP_THRESHOLD = 10 // points; gap wider than this = new column
-
+const WORD_SPACE_THRESHOLD = 1.5
 /**
  * Extracts rows of column-separated text from a PDF File object.
  * Returns an array of strings, one per row, with columns joined by '\t'.
@@ -61,6 +61,8 @@ async function extractRowsFromPdf(file) {
         if (gap > COLUMN_GAP_THRESHOLD) {
           columns.push(currentColumn.trim())
           currentColumn = frag.text
+        } else if (gap > WORD_SPACE_THRESHOLD) {
+          currentColumn += ' ' + frag.text
         } else {
           currentColumn += frag.text
         }
@@ -85,7 +87,18 @@ function parseRow(rowText, index) {
   if (/^-+$/.test(trimmed.replace(/\t/g, ''))) return null
   if (/^(order|date|product)\b/i.test(trimmed)) return null
 
-  const parts = trimmed.split('\t').map((p) => p.trim()).filter(Boolean)
+  let parts = trimmed.split('\t').map((p) => p.trim()).filter(Boolean)
+
+  // Fallback: if column-gap detection didn't produce enough columns,
+  // try splitting on the raw text as if it were space-delimited instead.
+  if (parts.length < 4) {
+    const collapsed = trimmed.replace(/\t/g, ' ')
+    const spaceSplit = collapsed.split(/\s{2,}/).filter(Boolean)
+    if (spaceSplit.length >= 4) {
+      parts = spaceSplit
+    }
+  }
+
   if (parts.length < 4) return null
 
   const [product, brand, platform, priceRaw] = parts

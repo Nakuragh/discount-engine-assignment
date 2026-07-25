@@ -2,9 +2,10 @@
  * pdfParser.js
  *
  * Extracts cart items from an uploaded PDF using pdfjs-dist (client-side only).
- * Reconstructs table columns using each text fragment's x-position, since PDFs
- * don't reliably preserve whitespace as literal space characters — a wide gap
- * between two text fragments means a new column, not just a bigger space.
+ * Instead of a fixed gap-size threshold, this reconstructs the 4 table columns
+ * per row by finding that row's 3 largest horizontal gaps between text
+ * fragments — those gaps are the column boundaries, regardless of how any
+ * given PDF happens to encode spacing.
  */
 
 import * as pdfjsLib from 'pdfjs-dist'
@@ -12,11 +13,73 @@ import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc
 
-const COLUMN_GAP_THRESHOLD = 10 // points; gap wider than this = new column
-const WORD_SPACE_THRESHOLD = 1.5
+const EXPECTED_COLUMNS = 4
+
 /**
- * Extracts rows of column-separated text from a PDF File object.
- * Returns an array of strings, one per row, with columns joined by '\t'.
+ * Groups a page's text items into rows by vertical (y) position.
+ */
+function groupIntoRows(items) {
+  const rowsByY = {}
+  items.forEach((item) => {
+    const y = Math.round(item.transform[5])
+    if (!rowsByY[y]) rowsByY[y] = []
+    rowsByY[y].push({
+      x: item.transform[4],
+      width: item.width || 0,
+      text: item.str,
+    })
+  })
+  return rowsByY
+}
+
+/**
+ * Splits one row's text fragments into columns using the largest gaps
+ * between fragments as column boundaries. Falls back to a single column
+ * (whole row joined) if there aren't enough fragments to split meaningfully.
+ */
+function splitRowIntoColumns(fragments) {
+  const sorted = fragments
+    .filter((f) => f.text.trim().length > 0)
+    .sort((a, b) => a.x - b.x)
+
+  if (sorted.length === 0) return []
+  if (sorted.length === 1) return [sorted[0].text.trim()]
+
+  // Compute the gap before each fragment (except the first)
+  const gaps = []
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = sorted[i].x - (sorted[i - 1].x + sorted[i - 1].width)
+    gaps.push({ index: i, gap })
+  }
+
+  // Pick the (EXPECTED_COLUMNS - 1) largest gaps as column-break points
+  const breakCount = Math.min(EXPECTED_COLUMNS - 1, gaps.length)
+  const sortedGaps = [...gaps].sort((a, b) => b.gap - a.gap)
+  const breakIndices = new Set(
+    sortedGaps.slice(0, breakCount).map((g) => g.index)
+  )
+
+  // Rebuild columns, inserting a space for small gaps that are just word spacing
+  const columns = []
+  let current = sorted[0].text
+  for (let i = 1; i < sorted.length; i++) {
+    const gapInfo = gaps[i - 1]
+    if (breakIndices.has(i)) {
+      columns.push(current.trim())
+      current = sorted[i].text
+    } else if (gapInfo.gap > 1.5) {
+      current += ' ' + sorted[i].text
+    } else {
+      current += sorted[i].text
+    }
+  }
+  columns.push(current.trim())
+
+  return columns
+}
+
+/**
+ * Extracts an array of column-arrays, one per row, from a PDF File object.
  */
 async function extractRowsFromPdf(file) {
   const arrayBuffer = await file.arrayBuffer()
@@ -27,50 +90,12 @@ async function extractRowsFromPdf(file) {
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum)
     const content = await page.getTextContent()
-
-    // Group text fragments by their vertical position (y) to reconstruct rows
-    const rowsByY = {}
-    content.items.forEach((item) => {
-      const y = Math.round(item.transform[5])
-      if (!rowsByY[y]) rowsByY[y] = []
-      rowsByY[y].push({
-        x: item.transform[4],
-        width: item.width || 0,
-        text: item.str,
-      })
-    })
+    const rowsByY = groupIntoRows(content.items)
 
     const sortedY = Object.keys(rowsByY).sort((a, b) => b - a) // top to bottom
-
     sortedY.forEach((y) => {
-      const fragments = rowsByY[y]
-        .filter((f) => f.text.trim().length > 0)
-        .sort((a, b) => a.x - b.x)
-
-      if (fragments.length === 0) return
-
-      // Merge fragments into columns based on x-gap
-      const columns = []
-      let currentColumn = fragments[0].text
-      let prevEndX = fragments[0].x + fragments[0].width
-
-      for (let i = 1; i < fragments.length; i++) {
-        const frag = fragments[i]
-        const gap = frag.x - prevEndX
-
-        if (gap > COLUMN_GAP_THRESHOLD) {
-          columns.push(currentColumn.trim())
-          currentColumn = frag.text
-        } else if (gap > WORD_SPACE_THRESHOLD) {
-          currentColumn += ' ' + frag.text
-        } else {
-          currentColumn += frag.text
-        }
-        prevEndX = frag.x + frag.width
-      }
-      columns.push(currentColumn.trim())
-
-      allRows.push(columns.join('\t'))
+      const columns = splitRowIntoColumns(rowsByY[y])
+      if (columns.length > 0) allRows.push(columns)
     })
   }
 
@@ -78,42 +103,30 @@ async function extractRowsFromPdf(file) {
 }
 
 /**
- * Parses one tab-separated row into a CartItem, or returns null if
- * the row doesn't look like a valid data row (header, separator, malformed).
+ * Parses one row's columns into a CartItem, or returns null if it doesn't
+ * look like a valid data row (header, separator, order metadata, malformed).
  */
-function parseRow(rowText, index) {
-  const trimmed = rowText.trim()
-  if (!trimmed) return null
-  if (/^-+$/.test(trimmed.replace(/\t/g, ''))) return null
-  if (/^(order|date|product)\b/i.test(trimmed)) return null
+function parseRow(columns, index) {
+  if (!columns || columns.length < EXPECTED_COLUMNS) return null
 
-  let parts = trimmed.split('\t').map((p) => p.trim()).filter(Boolean)
+  const joined = columns.join(' ')
+  if (/^-+$/.test(joined.replace(/\s/g, ''))) return null
+  if (/^(order|date|product)\b/i.test(joined.trim())) return null
 
-  // Fallback: if column-gap detection didn't produce enough columns,
-  // try splitting on the raw text as if it were space-delimited instead.
-  if (parts.length < 4) {
-    const collapsed = trimmed.replace(/\t/g, ' ')
-    const spaceSplit = collapsed.split(/\s{2,}/).filter(Boolean)
-    if (spaceSplit.length >= 4) {
-      parts = spaceSplit
-    }
-  }
-
-  if (parts.length < 4) return null
-
-  const [product, brand, platform, priceRaw] = parts
+  const [product, brand, platform, priceRaw] = columns
 
   const priceMatch = priceRaw.match(/Rs\.?\s?([\d,]+(?:\.\d+)?)/i)
   if (!priceMatch) return null
 
   const basePrice = parseFloat(priceMatch[1].replace(/,/g, ''))
   if (isNaN(basePrice) || basePrice <= 0) return null
+  if (!product || !brand || !platform) return null
 
   return {
     itemId: `ITEM-PDF-${index + 1}`,
-    product,
-    brand,
-    platform,
+    product: product.trim(),
+    brand: brand.trim(),
+    platform: platform.trim(),
     basePrice: Math.round(basePrice),
   }
 }
@@ -128,13 +141,16 @@ export async function parseCartPdf(file) {
   const skippedRows = []
   let itemIndex = 0
 
-  rows.forEach((rowText) => {
-    const parsed = parseRow(rowText, itemIndex)
+  rows.forEach((columns) => {
+    const joined = columns.join(' ').trim()
+    if (!joined) return
+
+    const parsed = parseRow(columns, itemIndex)
     if (parsed) {
       data.push(parsed)
       itemIndex++
-    } else if (/\d/.test(rowText) && !/^(order|date)/i.test(rowText.trim())) {
-      skippedRows.push(rowText.replace(/\t/g, '  ').trim())
+    } else if (/\d/.test(joined) && !/^(order|date)/i.test(joined)) {
+      skippedRows.push(joined)
     }
   })
 

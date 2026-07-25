@@ -5,6 +5,7 @@ import ErrorBanner from './components/ErrorBanner.jsx'
 import NLRuleInput from './components/NLRuleInput.jsx'
 import { parseRulesCSV, parseCartCSV } from './engine/csvParser.js'
 import { calculateCart } from './engine/discountEngine.js'
+import PdfCartUploader from './components/PdfCartUploader.jsx'
 
 const RULES_COLUMNS = [
   { key: 'ruleId',    label: 'Rule ID' },
@@ -109,6 +110,19 @@ export default function App() {
     setResults(null)
   }
 
+  function handlePdfCartLoad(items, skippedRows, fileName) {
+  setCartItems(items)
+  setCartErrors(
+    skippedRows.map((row) =>
+      typeof row === 'string' && row.length < 100
+        ? `Skipped unparseable row: "${row}"`
+        : row
+    )
+  )
+  setCartFileName(fileName || 'cart.pdf')
+  setResults(null)
+}
+
   function handleCartLoad(csvText, fileName) {
     const { data, errors } = parseCartCSV(csvText)
     setCartItems(data)
@@ -179,6 +193,7 @@ export default function App() {
               hasData={cartItems.length > 0}
               fileName={cartFileName}
             />
+            <PdfCartUploader onLoad={handlePdfCartLoad} />
             <ErrorBanner errors={cartErrors} />
             {cartItems.length > 0 && (
               <div style={{ marginTop: '0.75rem' }}>

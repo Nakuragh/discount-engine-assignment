@@ -20,11 +20,10 @@ export default function NLRuleInput({ onConfirmRule }) {
       const data = await res.json()
 
       if (!res.ok || data.resolvable === false) {
-        const debugRaw = data.raw ? ` [RAW: ${data.raw}]` : ''
-        setErrorMsg((data.clarificationNeeded || data.error || 'Could not parse that rule.') + debugRaw)
-        setStatus('error')
-        return
-      }
+     setErrorMsg(data.clarificationNeeded || data.error || 'Could not parse that rule.')
+     setStatus('error')
+     return
+   }
 
       setParsed(data)
       setStatus('confirming')

@@ -1,18 +1,10 @@
-/**
- * App.jsx
- *
- * Top-level component. Manages state for rules, cart items, and results.
- * Wires together CSV upload → parse → engine → display.
- */
-
 import { useState } from 'react'
 import CsvUploader from './components/CsvUploader.jsx'
 import DataTable from './components/DataTable.jsx'
 import ErrorBanner from './components/ErrorBanner.jsx'
+import NLRuleInput from './components/NLRuleInput.jsx'
 import { parseRulesCSV, parseCartCSV } from './engine/csvParser.js'
 import { calculateCart } from './engine/discountEngine.js'
-
-// ── Column definitions ───────────────────────────────────────────
 
 const RULES_COLUMNS = [
   { key: 'ruleId',    label: 'Rule ID' },
@@ -67,8 +59,6 @@ const RESULTS_COLUMNS = [
   },
 ]
 
-// ── Styles ───────────────────────────────────────────────────────
-
 const S = {
   page:    { minHeight: '100vh', background: '#f7f7f9', fontFamily: 'Arial, sans-serif' },
   header:  { background: '#131A48', padding: '0.85rem 2rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
@@ -96,13 +86,7 @@ const S = {
   },
   totalLabel: { fontWeight: 700, fontSize: 14, color: '#131A48' },
   totalValue: { fontWeight: 700, fontSize: 16, color: '#131A48' },
-  tag: (color, bg) => ({
-    display: 'inline-block', fontSize: 10, fontWeight: 700, padding: '1px 6px',
-    borderRadius: 20, background: bg, color, textTransform: 'uppercase', letterSpacing: '0.04em',
-  }),
 }
-
-// ── Component ────────────────────────────────────────────────────
 
 export default function App() {
   const [rules, setRules]           = useState([])
@@ -116,14 +100,13 @@ export default function App() {
   const [results, setResults]       = useState(null)
   const [cartOffer, setCartOffer]         = useState(null)
   const [finalCartTotal, setFinalCartTotal] = useState(0)
-  // ── Handlers ──
 
   function handleRulesLoad(csvText, fileName) {
     const { data, errors } = parseRulesCSV(csvText)
     setRules(data)
     setRulesErr(errors)
     setRulesFileName(fileName)
-    setResults(null) // clear stale results
+    setResults(null)
   }
 
   function handleCartLoad(csvText, fileName) {
@@ -135,29 +118,37 @@ export default function App() {
   }
 
   function handleCalculate() {
-  const { results, cartOffer, finalCartTotal } = calculateCart(cartItems, rules)
-  setResults(results)
-  setCartOffer(cartOffer)
-  setFinalCartTotal(finalCartTotal)
-}
+    const { results, cartOffer, finalCartTotal } = calculateCart(cartItems, rules)
+    setResults(results)
+    setCartOffer(cartOffer)
+    setFinalCartTotal(finalCartTotal)
+  }
+
+  function handleConfirmNewRule(parsed) {
+    const newRule = {
+      ruleId: `RULE-CUSTOM-${rules.length + 1}`,
+      scope: parsed.scope,
+      appliesTo: parsed.scope === 'cart' ? null : parsed.appliesTo,
+      type: parsed.type,
+      value: parsed.value,
+      stackable: parsed.stackable,
+      minCartValue: parsed.scope === 'cart' ? parsed.minCartValue : null,
+    }
+    setRules((prev) => [...prev, newRule])
+    setResults(null)
+  }
 
   const canCalculate = rules.length > 0 && cartItems.length > 0
 
-  // ── Render ──
-
   return (
     <div style={S.page}>
-      {/* Header */}
       <div style={S.header}>
         <div style={S.logoTxt}>O<span style={S.logoSpan}>pp</span>tra</div>
         <div style={S.headerSub}>Discount Engine</div>
       </div>
 
       <div style={S.main}>
-
-        {/* Upload row */}
         <div style={S.grid2}>
-          {/* Rules upload */}
           <div style={S.section}>
             <div style={S.sectionTitle}>Discount Rules</div>
             <CsvUploader
@@ -176,9 +167,9 @@ export default function App() {
                 <DataTable columns={RULES_COLUMNS} rows={rules} />
               </div>
             )}
+            <NLRuleInput onConfirmRule={handleConfirmNewRule} />
           </div>
 
-          {/* Cart upload */}
           <div style={S.section}>
             <div style={S.sectionTitle}>Cart Items</div>
             <CsvUploader
@@ -200,7 +191,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Calculate button */}
         <div style={{ textAlign: 'center', marginBottom: '1.2rem' }}>
           <button
             style={canCalculate ? S.btn : S.btnDisabled}
@@ -216,28 +206,26 @@ export default function App() {
           )}
         </div>
 
-        {/* Results */}
         {results && (
-  <div style={S.section}>
-    <div style={S.sectionTitle}>Cart Summary</div>
-    <DataTable columns={RESULTS_COLUMNS} rows={results} />
+          <div style={S.section}>
+            <div style={S.sectionTitle}>Cart Summary</div>
+            <DataTable columns={RESULTS_COLUMNS} rows={results} />
 
-    {cartOffer && (
-      <div style={{ ...S.totalRow, borderTop: '1px dashed #CECECE', color: '#1e5c2c' }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{cartOffer.label}</span>
-        <span style={{ fontWeight: 700, fontSize: 13 }}>
-          — Rs.{cartOffer.amountSaved.toLocaleString('en-IN')} saved
-        </span>
-      </div>
-    )}
+            {cartOffer && (
+              <div style={{ ...S.totalRow, borderTop: '1px dashed #CECECE', color: '#1e5c2c' }}>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{cartOffer.label}</span>
+                <span style={{ fontWeight: 700, fontSize: 13 }}>
+                  — Rs.{cartOffer.amountSaved.toLocaleString('en-IN')} saved
+                </span>
+              </div>
+            )}
 
-    <div style={S.totalRow}>
-      <span style={S.totalLabel}>Cart Total</span>
-      <span style={S.totalValue}>Rs.{finalCartTotal.toLocaleString('en-IN')}</span>
-    </div>
-  </div>
-)}
-
+            <div style={S.totalRow}>
+              <span style={S.totalLabel}>Cart Total</span>
+              <span style={S.totalValue}>Rs.{finalCartTotal.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

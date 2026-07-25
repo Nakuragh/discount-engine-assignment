@@ -56,7 +56,10 @@ Rules:
     }
 
     const data = await response.json()
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+    let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+   if (rawText) {
+     rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+   }
 
     let parsed
     try {

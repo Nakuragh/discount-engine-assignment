@@ -43,7 +43,10 @@ Rules:
           contents: [{ role: 'user', parts: [{ text }] }],
           generationConfig: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 300,
+            maxOutputTokens: 1024,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
           },
         }),
       }

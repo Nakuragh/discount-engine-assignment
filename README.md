@@ -53,4 +53,4 @@ PDF parsing runs entirely client-side via `pdfjs-dist`, consistent with the assi
 ---
 
 ## Loom Walkthrough
-[link here]
+https://www.loom.com/share/09aee68e758d4d76b8ceb3ce28bc7ad9

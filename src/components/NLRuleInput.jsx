@@ -20,10 +20,10 @@ export default function NLRuleInput({ onConfirmRule }) {
       const data = await res.json()
 
       if (!res.ok || data.resolvable === false) {
-     setErrorMsg(data.clarificationNeeded || data.error || 'Could not parse that rule.')
-     setStatus('error')
-     return
-   }
+        setErrorMsg(data.clarificationNeeded || data.error || 'Could not parse that rule.')
+        setStatus('error')
+        return
+      }
 
       setParsed(data)
       setStatus('confirming')
@@ -79,9 +79,7 @@ export default function NLRuleInput({ onConfirmRule }) {
       )}
 
       {status === 'error' && (
-        <div style={{ marginTop: 8, fontSize: 12, color: '#b00020' }}>
-          {errorMsg}
-        </div>
+        <div style={{ marginTop: 8, fontSize: 12, color: '#b00020' }}>{errorMsg}</div>
       )}
 
       {status === 'confirming' && parsed && (

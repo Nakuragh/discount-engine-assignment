@@ -1,13 +1,3 @@
-/**
- * pdfParser.js
- *
- * Extracts cart items from an uploaded PDF using pdfjs-dist (client-side only).
- * Reconstructs the 4 table columns per row by finding that row's largest
- * horizontal gaps between text fragments and treating those as column
- * boundaries. Falls back to space-run splitting if a row comes through
- * as a single unbroken text fragment.
- */
-
 import * as pdfjsLib from 'pdfjs-dist'
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
@@ -20,15 +10,14 @@ function groupIntoRows(items) {
   items.forEach((item) => {
     const y = Math.round(item.transform[5])
     if (!rowsByY[y]) rowsByY[y] = []
-    rowsByY[y].push({
-      x: item.transform[4],
-      width: item.width || 0,
-      text: item.str,
-    })
+    rowsByY[y].push({ x: item.transform[4], width: item.width || 0, text: item.str })
   })
   return rowsByY
 }
 
+// PDFs don't reliably preserve column spacing as literal characters, so
+// column boundaries are inferred from each row's largest horizontal gaps
+// between text fragments, rather than assuming a fixed threshold.
 function splitRowIntoColumns(fragments) {
   const sorted = fragments
     .filter((f) => f.text.trim().length > 0)
@@ -43,8 +32,7 @@ function splitRowIntoColumns(fragments) {
 
   const gaps = []
   for (let i = 1; i < sorted.length; i++) {
-    const gap = sorted[i].x - (sorted[i - 1].x + sorted[i - 1].width)
-    gaps.push({ index: i, gap })
+    gaps.push({ index: i, gap: sorted[i].x - (sorted[i - 1].x + sorted[i - 1].width) })
   }
 
   const breakCount = Math.min(EXPECTED_COLUMNS - 1, gaps.length)
@@ -74,19 +62,18 @@ async function extractRowsFromPdf(file) {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
 
   const allRows = []
-
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum)
     const content = await page.getTextContent()
     const rowsByY = groupIntoRows(content.items)
 
-    const sortedY = Object.keys(rowsByY).sort((a, b) => b - a)
-    sortedY.forEach((y) => {
-      const columns = splitRowIntoColumns(rowsByY[y])
-      if (columns.length > 0) allRows.push(columns)
-    })
+    Object.keys(rowsByY)
+      .sort((a, b) => b - a)
+      .forEach((y) => {
+        const columns = splitRowIntoColumns(rowsByY[y])
+        if (columns.length > 0) allRows.push(columns)
+      })
   }
-
   return allRows
 }
 
@@ -98,7 +85,6 @@ function parseRow(columns, index) {
   if (/^(order|date|product)\b/i.test(joined.trim())) return null
 
   const [product, brand, platform, priceRaw] = columns
-
   const priceMatch = priceRaw.match(/Rs\.?\s?([\d,]+(?:\.\d+)?)/i)
   if (!priceMatch) return null
 

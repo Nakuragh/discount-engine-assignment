@@ -3,7 +3,7 @@ import { parseCartPdf } from '../engine/pdfParser.js'
 
 export default function PdfCartUploader({ onLoad }) {
   const inputRef = useRef(null)
-  const [status, setStatus] = useState('idle') // idle | loading | error
+  const [status, setStatus] = useState('idle')
 
   async function handleFile(e) {
     const file = e.target.files[0]
@@ -35,22 +35,12 @@ export default function PdfCartUploader({ onLoad }) {
     <div style={{ marginTop: '0.6rem' }}>
       <div
         style={{
-          border: '1px dashed #CECECE',
-          borderRadius: 6,
-          padding: '0.6rem 0.9rem',
-          background: '#fafafa',
-          cursor: 'pointer',
-          fontSize: 12,
+          border: '1px dashed #CECECE', borderRadius: 6, padding: '0.6rem 0.9rem',
+          background: '#fafafa', cursor: 'pointer', fontSize: 12,
         }}
         onClick={() => inputRef.current?.click()}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".pdf"
-          style={{ display: 'none' }}
-          onChange={handleFile}
-        />
+        <input ref={inputRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={handleFile} />
         <span style={{ color: '#FF5800', fontWeight: 700 }}>
           {status === 'loading' ? 'Reading PDF…' : 'Or upload cart as PDF'}
         </span>

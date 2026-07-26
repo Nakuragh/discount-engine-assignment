@@ -1,6 +1,3 @@
-// api/parse-rule.js
-// Vercel serverless function — calls Google Gemini, keeps the API key server-side.
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -26,11 +23,11 @@ Schema:
 }
 
 Rules:
-- If the description is missing a concrete value (e.g. "a discount", "some percent off") or, for a cart-scope rule, missing a threshold amount, set resolvable=false and put a short, specific question in clarificationNeeded. Leave value/appliesTo as null in that case.
+- If the description is missing a concrete value or, for a cart-scope rule, missing a threshold amount, set resolvable=false and put a short, specific question in clarificationNeeded. Leave value/appliesTo as null in that case.
 - If scope is "cart", appliesTo must be null and minCartValue must be a positive number.
 - If scope is "brand" or "platform", appliesTo must be a non-empty string and minCartValue must be null.
 - Default stackable to false if not mentioned.
-- Return ONLY the JSON object. No markdown, no prose, no code fences.`
+- Return ONLY the JSON object.`
 
   try {
     const response = await fetch(
@@ -44,9 +41,7 @@ Rules:
           generationConfig: {
             responseMimeType: 'application/json',
             maxOutputTokens: 2048,
-            thinkingConfig: {
-              thinkingBudget: 0,
-            },
+            thinkingConfig: { thinkingBudget: 0 },
             responseSchema: {
               type: 'OBJECT',
               properties: {
@@ -74,9 +69,9 @@ Rules:
 
     const data = await response.json()
     let rawText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
-   if (rawText) {
-     rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
-   }
+    if (rawText) {
+      rawText = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
+    }
 
     let parsed
     try {
@@ -87,10 +82,7 @@ Rules:
 
     const validation = validateParsedRule(parsed)
     if (!validation.valid) {
-      return res.status(200).json({
-        resolvable: false,
-        clarificationNeeded: validation.reason,
-      })
+      return res.status(200).json({ resolvable: false, clarificationNeeded: validation.reason })
     }
 
     return res.status(200).json(parsed)
@@ -100,6 +92,7 @@ Rules:
   }
 }
 
+// Server-side re-validation — the model's own resolvable flag isn't trusted blindly.
 function validateParsedRule(parsed) {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, reason: 'Could not understand that rule. Please rephrase with a specific value.' }
@@ -120,10 +113,8 @@ function validateParsedRule(parsed) {
     if (typeof parsed.minCartValue !== 'number' || parsed.minCartValue <= 0) {
       return { valid: false, reason: 'Please specify a minimum cart value, e.g. "if cart is over Rs.5,000".' }
     }
-  } else {
-    if (!parsed.appliesTo || typeof parsed.appliesTo !== 'string') {
-      return { valid: false, reason: 'Please specify which brand or platform this applies to.' }
-    }
+  } else if (!parsed.appliesTo || typeof parsed.appliesTo !== 'string') {
+    return { valid: false, reason: 'Please specify which brand or platform this applies to.' }
   }
   return { valid: true }
 }

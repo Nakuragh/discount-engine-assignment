@@ -1,9 +1,3 @@
-/**
- * csvParser.js
- *
- * Converts raw CSV text into the typed objects the discount engine expects.
- */
-
 import Papa from 'papaparse'
 
 export function parseRulesCSV(csvText) {
